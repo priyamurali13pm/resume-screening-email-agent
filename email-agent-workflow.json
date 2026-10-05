@@ -1,0 +1,831 @@
+{
+  "name": "Twinn.live - Full Resume Scan + Reply Email Automation (v5)",
+  "nodes": [
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "position",
+              "name": "position",
+              "type": "string",
+              "value": "Customer Outreach Executive"
+            },
+            {
+              "id": "job-req",
+              "name": "job_requirements",
+              "type": "string",
+              "value": "Good communication skills, confident reaching out to business owners and potential customers, comfortable with online research and social media, can write professional messages and emails, proactive and willing to take initiative, can handle follow-ups professionally, interested in startups, AI, technology, and business development, can work independently as well as with a team."
+            },
+            {
+              "id": "min-score",
+              "name": "min_score",
+              "type": "number",
+              "value": 70
+            },
+            {
+              "id": "interview-hour",
+              "name": "interview_hour",
+              "type": "number",
+              "value": 11
+            },
+            {
+              "id": "interview-minute",
+              "name": "interview_minute",
+              "type": "number",
+              "value": 0
+            },
+            {
+              "id": "whatsapp",
+              "name": "whatsapp_contact",
+              "type": "string",
+              "value": "YOUR_WHATSAPP_NUMBER"
+            },
+            {
+              "id": "notify-email",
+              "name": "notify_email",
+              "type": "string",
+              "value": "YOUR_NOTIFY_EMAIL@example.com"
+            },
+            {
+              "id": "notify-whatsapp-to",
+              "name": "notify_whatsapp_to",
+              "type": "string",
+              "value": "whatsapp:+91XXXXXXXXXX"
+            },
+            {
+              "id": "twilio-from",
+              "name": "twilio_whatsapp_from",
+              "type": "string",
+              "value": "whatsapp:+14155238886"
+            },
+            {
+              "id": "gemini-key",
+              "name": "gemini_api_key",
+              "type": "string",
+              "value": "YOUR_GEMINI_API_KEY"
+            },
+            {
+              "id": "test-mode",
+              "name": "test_mode",
+              "type": "boolean",
+              "value": false
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "3a398830-1c75-42c3-995b-59c3ac8c164f",
+      "name": "Config (EDIT ME per role)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1440,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "from:MANAGER_EMAIL@example.com has:attachment filename:pdf"
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "id": "547fed60-416b-4675-b7ce-29e3c3a7b862",
+      "name": "Resume Forwarded by Manager",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1920,
+        240
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "attachment_0",
+        "options": {}
+      },
+      "id": "a118f7fa-8b62-4ba4-9d46-82cc4308e638",
+      "name": "Extract Resume Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1680,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config (EDIT ME per role)').first().json;\nconst input = $input.first().json;\n\nconst body = {\n  systemInstruction: {\n    parts: [{\n      text: \"Extract the candidate full name and email address from this resume text. Respond with ONLY valid JSON: {\\\"name\\\":\\\"...\\\",\\\"email\\\":\\\"...\\\"}. If email is not found, use an empty string.\"\n    }]\n  },\n  contents: [{\n    parts: [{\n      text: input.text\n    }]\n  }],\n  generationConfig: {\n    responseMimeType: \"application/json\"\n  }\n};\n\ntry {\n  const res = await this.helpers.httpRequest({\n    method: \"POST\",\n    url: \"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent\",\n    headers: {\n      \"x-goog-api-key\": cfg.gemini_api_key,\n      \"Content-Type\": \"application/json\"\n    },\n    body,\n    json: true\n  });\n\n  return [{\n    json: {\n      success: true,\n      response: res\n    }\n  }];\n\n} catch (error) {\n\n  return [{\n    json: {\n      success: false,\n      statusCode: error.statusCode,\n      message: error.message,\n      response: error.response,\n      error: error\n    }\n  }];\n}"
+      },
+      "id": "053f7e65-49c1-4548-bd96-90fbc1bb1fa0",
+      "name": "Extract Candidate Name & Email (Gemini)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let raw = '';\n\ntry {\n  raw = $input.first().json.response.candidates[0].content.parts[0].text;\n} catch (e) {\n  raw = '';\n}\n\nraw = raw.replace(/```json|```/g, '').trim();\n\nlet parsed = {};\n\ntry {\n  parsed = JSON.parse(raw);\n} catch (e) {\n  parsed = {};\n}\n\nreturn [{\n  json: {\n    name: String(parsed.name || 'Candidate'),\n    email: String(parsed.email || '').trim(),\n    resumeText: $('Extract Resume Text').first().json.text\n  }\n}];"
+      },
+      "id": "30a37e62-0144-49f8-a979-8ff682d1eb53",
+      "name": "Parse Candidate Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{$json[\"email\"]}}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              },
+              "id": "7437ec35-8d6b-4e4d-8869-f376be2969ee"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "134e125e-0a55-4fde-a2f4-883f06150a45",
+      "name": "Email Extracted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -720,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$('Config (EDIT ME per role)').first().json[\"notify_email\"]}}",
+        "subject": "=[ACTION NEEDED] Could not extract candidate email from resume",
+        "emailType": "text",
+        "message": "=The resume workflow could not find a candidate email address in the resume forwarded on {{$now.toFormat('dd LLL yyyy, hh:mm a')}}.\n\nCandidate name (if found): {{$json[\"name\"]}}\n\nPlease open the original email from the manager and process this resume manually.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "749a054e-0049-4638-90c1-dec4f2b184b8",
+      "name": "Notify - Missing Candidate Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -720,
+        320
+      ],
+      "webhookId": "30cb89bb-e8d4-45a9-a6dd-36cdc33d4958",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config (EDIT ME per role)').first().json;\nconst input = $input.first().json;\n\nconst resumeText = input.resumeText || '';\n\nconst prompt = `\nYou are a recruitment screening assistant.\n\nEvaluate this candidate resume against the job/role configuration below.\n\nJOB / ROLE CONFIGURATION:\n${JSON.stringify(cfg, null, 2)}\n\nCANDIDATE RESUME:\n${resumeText}\n\nReturn ONLY valid JSON in exactly this format:\n{\n  \"score\": 75,\n  \"reason\": \"Brief explanation of why the candidate received this score.\"\n}\n\nRules:\n- Score must be an integer from 0 to 100.\n- Evaluate based on the role requirements, skills, experience, education, and relevant projects.\n- Do not invent candidate experience.\n- Keep the reason concise but informative.\n`;\n\nconst body = {\n  systemInstruction: {\n    parts: [{\n      text: \"You are a precise candidate screening assistant. Return only valid JSON.\"\n    }]\n  },\n  contents: [{\n    role: \"user\",\n    parts: [{\n      text: prompt\n    }]\n  }],\n  generationConfig: {\n    responseMimeType: \"application/json\"\n  }\n};\n\ntry {\n  const res = await this.helpers.httpRequest({\n    method: \"POST\",\n    url: \"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent\",\n    headers: {\n      \"x-goog-api-key\": cfg.gemini_api_key,\n      \"Content-Type\": \"application/json\"\n    },\n    body,\n    json: true\n  });\n\n  const raw = res.candidates?.[0]?.content?.parts?.[0]?.text || \"\";\n\n  const parsed = JSON.parse(\n    raw.replace(/```json|```/g, \"\").trim()\n  );\n\n  return [{\n    json: {\n      score: Number(parsed.score),\n      reason: String(parsed.reason || \"\")\n    }\n  }];\n\n} catch (error) {\n\n  return [{\n    json: {\n      success: false,\n      statusCode: error.statusCode,\n      message: error.message,\n      response: error.response\n    }\n  }];\n}"
+      },
+      "id": "85050c52-e3a1-40c3-be3f-e93e87acfd68",
+      "name": "Score Resume Against Position (Gemini)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst base = $('Parse Candidate Info').first().json;\n\nreturn [{\n  json: {\n    name: base.name,\n    email: base.email,\n    score: Number(input.score) || 0,\n    reason: input.reason || 'No reason returned'\n  }\n}];"
+      },
+      "id": "e0989749-cd76-40a0-8a30-a48bc60f46bd",
+      "name": "Parse Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ Number($json.Score) }}",
+              "rightValue": "={{ Number(70) }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              },
+              "id": "db0f81fe-9f9a-485d-a03f-89a6997df3e3"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "297785a6-5cc4-43a7-b489-25f9bd00c687",
+      "name": "Score >= Threshold?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -64,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.twilio.com/2010-04-01/Accounts/REPLACE_WITH_TWILIO_ACCOUNT_SID/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "From",
+              "value": "={{$('Config (EDIT ME per role)').first().json[\"twilio_whatsapp_from\"]}}"
+            },
+            {
+              "name": "To",
+              "value": "={{$('Config (EDIT ME per role)').first().json[\"notify_whatsapp_to\"]}}"
+            },
+            {
+              "name": "Body",
+              "value": "=Shortlisted: {{$('Parse Score').first().json[\"name\"]}} for {{$('Config (EDIT ME per role)').first().json[\"position\"]}} (score {{$('Parse Score').first().json[\"score\"]}}/100). Interview + Meet link will be sent to them automatically."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f67c3144-4906-4af3-864e-378ee53c1566",
+      "name": "Notify WhatsApp - Shortlisted (Twilio)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        240
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "resume": "specificTime",
+        "dateTime": "={{ $('Config (EDIT ME per role)').first().json.test_mode ? $now.plus({ minutes: 1 }).toISO() : $now.plus({ days: 1 }).set({ hour: 10, minute: 0, second: 0 }).toISO() }}"
+      },
+      "id": "4e63e0ce-ae95-4c8c-93a0-a0efcbd4469a",
+      "name": "Wait Until Next Day 10 AM",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        0
+      ],
+      "webhookId": "b875b18a-59f5-43bd-a244-e9c64872d045"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$('Parse Score').first().json[\"email\"]}}",
+        "subject": "=Welcome to Twinn.live – Customer Outreach Executive",
+        "emailType": "text",
+        "message": "=Dear {{$('Parse Score').first().json[\"name\"]}},\n\nThank you for confirming your interest in joining Twinn.live as a Customer Outreach Executive. We are excited to welcome you to Twinn.live, an AI-powered platform helping brands, creators, and businesses create, connect, and sell through innovative AI-powered digital experiences.\n\nAs a Customer Outreach Executive, you will be responsible for identifying potential customers, reaching out to brands and businesses, understanding their requirements, introducing Twinn.live solutions, and maintaining consistent follow-ups with potential clients.\n\nYour Key Responsibilities\n- Research and identify potential brands and businesses that can benefit from Twinn.live.\n- Generate and maintain qualified leads.\n- Reach out to potential customers through LinkedIn, Instagram, email, WhatsApp, and other approved channels.\n- Create personalized outreach messages based on the prospect's business.\n- Introduce Twinn.live and explain how our solutions can help their business.\n- Follow up with interested prospects regularly.\n- Maintain accurate lead and outreach records.\n- Schedule meetings or demos with interested prospects.\n- Understand customer requirements and communicate them to the relevant team.\n- Submit regular outreach and progress reports.\n- Work toward assigned outreach and lead-generation goals.\n\nWhat We're Looking For\nWe are looking for candidates who:\n- Have good communication skills.\n- Can communicate confidently with business owners and potential customers.\n- Are comfortable with online research and social media.\n- Can write professional messages and emails.\n- Are proactive and willing to take initiative.\n- Can handle follow-ups professionally.\n- Are interested in startups, AI, technology, and business development.\n- Can work independently as well as with a team.\n\nWhat You'll Get\n- Full-time employment opportunity\n- Hands-on experience in customer outreach and business development\n- Exposure to a fast-growing AI startup environment\n- Experience working with brands and business owners\n- Practical experience in B2B outreach and lead generation\n- Opportunity to work with AI-powered products and solutions\n- Performance-based recognition and growth opportunities\n- Opportunity to contribute to real-world business projects\n\nNext Steps\n- Explore the Twinn.live website and understand our products and services.\n- Go through our social media and LinkedIn profiles to understand our vision.\n- You will be added to the respective Twinn.live communication group.\n- Complete the onboarding process and training provided by the team.\n- Start researching and reaching out to potential customers according to the assigned process.\n- Maintain your daily outreach and lead records.\n- Submit your progress reports regularly.\n\nAbout Twinn.live\nTwinn.live is building AI-powered solutions that help businesses and brands create, connect, and sell through innovative digital experiences.\n\nConnect With Us\nTwinn.live LinkedIn: https://www.linkedin.com/company/twinnlive\nFounder: https://www.linkedin.com/in/parkqwikarunkumar/\n\nNeed Help?\nFor any questions or assistance, please contact us on WhatsApp: YOUR_WHATSAPP_NUMBER\n\nWe are excited to have you join Twinn.live and look forward to building something impactful together.\n\nBest Regards,\nTeam Twinn.live",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "035c7451-c635-491b-9d0a-53088e2a493c",
+      "name": "Send 1st Email (Welcome)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        464,
+        0
+      ],
+      "webhookId": "cd904103-27ff-436c-babb-0ea752622145",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "specificTime",
+        "dateTime": "={{ $('Config (EDIT ME per role)').first().json.test_mode ? $now.plus({ minutes: 1 }).toISO() : $now.plus({ hours: 5 }).toISO() }}"
+      },
+      "id": "df172c11-922f-4569-98a6-f5e7974a7965",
+      "name": "Wait 5 Hours",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        704,
+        0
+      ],
+      "webhookId": "82d05669-0517-4b30-8e9a-df705033dda8"
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "YOUR_NOTIFY_EMAIL@example.com",
+          "mode": "list",
+          "cachedResultName": "YOUR_NOTIFY_EMAIL@example.com"
+        },
+        "start": "={{ $now.plus({ days: 1 }).set({ hour: $('Config (EDIT ME per role)').first().json.interview_hour, minute: $('Config (EDIT ME per role)').first().json.interview_minute, second: 0 }).plus({ hours: $('Pick Slot').first().json.slot_offset }).toISO() }}",
+        "end": "={{ $now.plus({ days: 1 }).set({ hour: $('Config (EDIT ME per role)').first().json.interview_hour, minute: $('Config (EDIT ME per role)').first().json.interview_minute, second: 0 }).plus({ hours: $('Pick Slot').first().json.slot_offset + 1 }).toISO() }}",
+        "additionalFields": {
+          "attendees": [
+            "={{ $('Parse Score').first().json[\"email\"] }}"
+          ],
+          "conferenceDataUi": {
+            "conferenceDataValues": {
+              "conferenceSolution": "hangoutsMeet"
+            }
+          },
+          "sendUpdates": "all"
+        }
+      },
+      "id": "ed98918c-a33c-4d3d-aea4-c98108ada349",
+      "name": "Create Interview Slot (auto Meet link)",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1392,
+        0
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$('Parse Score').first().json[\"email\"]}}",
+        "subject": "=Interview Scheduled – Twinn.live {{$('Config (EDIT ME per role)').first().json[\"position\"]}}",
+        "emailType": "text",
+        "message": "=Dear {{$('Parse Score').first().json[\"name\"]}},\n\nCongratulations! As you had shown interest in the Twinn.live opportunity, we are pleased to inform you that you have been shortlisted, and your interview has been scheduled.\n\nInterview Details:\nDate: {{$now.plus({ days: 1 }).toFormat('cccc, d LLLL yyyy')}}\nInterview Window: {{$now.plus({ days: 1 }).set({ hour: $('Config (EDIT ME per role)').first().json[\"interview_hour\"], minute: $('Config (EDIT ME per role)').first().json[\"interview_minute\"] }).plus({ hours: $('Pick Slot').first().json.slot_offset }).toFormat('hh:mm a')}} to {{$now.plus({ days: 1 }).set({ hour: $('Config (EDIT ME per role)').first().json[\"interview_hour\"], minute: $('Config (EDIT ME per role)').first().json[\"interview_minute\"] }).plus({ hours: $('Pick Slot').first().json.slot_offset + 1 }).toFormat('hh:mm a')}} IST\nInterview Link: {{$('Create Interview Slot (auto Meet link)').first().json[\"hangoutLink\"]}}\n\nKindly join the interview using a laptop with a stable internet connection, as it will be conducted as a video interview. Please ensure that you join the interview on time without fail.\n\nWe wish you all the best for your interview!\n\nThanks and regards,\nTeam Twinn.live",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "13cec643-7cff-4837-b754-012a09fd6ff8",
+      "name": "Send 2nd Email (Interview Details)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1632,
+        0
+      ],
+      "webhookId": "f4a15b51-b458-47bf-bbf2-ced681f549bc",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$('Parse Score').first().json[\"email\"]}}",
+        "subject": "=Update on your application – Twinn.live {{$('Config (EDIT ME per role)').first().json[\"position\"]}}",
+        "emailType": "text",
+        "message": "=Dear {{$('Parse Score').first().json[\"name\"]}},\n\nThank you for your interest in the {{$('Config (EDIT ME per role)').first().json[\"position\"]}} role at Twinn.live and for taking the time to apply.\n\nAfter reviewing your profile, we won't be moving forward with your application for this particular role. We really appreciate the effort you put into applying and would encourage you to apply again for future openings that match your experience.\n\nWishing you all the best in your job search.\n\nBest regards,\nTeam Twinn.live",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "7dc1adbd-7dac-471e-a22e-4cb4edeac89e",
+      "name": "Send Decline Email (EDIT ME - optional)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        224,
+        448
+      ],
+      "webhookId": "535f009e-1996-4cb9-ae5a-25ac3544fbd4",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Twinn Hiring Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Score": "={{ $json.score }}",
+            "Reason": "={{ $json.reason }}",
+            "Date": "={{ $now.format('yyyy-MM-dd HH:mm') }}",
+            "Candidate Name": "={{ $('Parse Candidate Info').first().json.name }}",
+            "Candidate Email": "={{ $('Parse Candidate Info').first().json.email }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Candidate Name",
+              "displayName": "Candidate Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Candidate Email",
+              "displayName": "Candidate Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Score",
+              "displayName": "Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reason",
+              "displayName": "Reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Welcome Sent",
+              "displayName": "Welcome Sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Interview Sent",
+              "displayName": "Interview Sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -240,
+        64
+      ],
+      "id": "a1763b05-ab93-4099-a386-44f66675b4bb",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Twinn Hiring Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        928,
+        0
+      ],
+      "id": "6b5952cb-7707-43c3-8eff-fa345fa2e38b",
+      "name": "Count Candidates",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\nconst email = String($('Parse Score').first().json[\"email\"]).toLowerCase();\n\nconst mine = rows.filter(r => String(r[\"Candidate Email\"]).toLowerCase() === email);\nconst myRow = mine[mine.length - 1];\nconst day = myRow ? String(myRow[\"Date\"]).slice(0, 10) : $now.toFormat('yyyy-MM-dd');\n\nconst sameDay = rows.filter(r =>\n  String(r[\"Date\"]).slice(0, 10) === day && Number(r[\"Score\"]) >= 70\n);\n\nlet position = sameDay.findIndex(r => r === myRow) + 1;\nif (position === 0) position = sameDay.length + 1;\n\nreturn [{ json: { position, slot_offset: Math.floor((position - 1) / 10) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        0
+      ],
+      "id": "74c9c634-04d8-4d6c-99b2-03908d691152",
+      "name": "Pick Slot"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Resume Forwarded by Manager": {
+      "main": [
+        [
+          {
+            "node": "Extract Resume Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Resume Text": {
+      "main": [
+        [
+          {
+            "node": "Config (EDIT ME per role)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Candidate Name & Email (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Parse Candidate Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Candidate Info": {
+      "main": [
+        [
+          {
+            "node": "Email Extracted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Extracted?": {
+      "main": [
+        [
+          {
+            "node": "Score Resume Against Position (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify - Missing Candidate Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Resume Against Position (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Parse Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Score": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score >= Threshold?": {
+      "main": [
+        [
+          {
+            "node": "Wait Until Next Day 10 AM",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify WhatsApp - Shortlisted (Twilio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Decline Email (EDIT ME - optional)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Until Next Day 10 AM": {
+      "main": [
+        [
+          {
+            "node": "Send 1st Email (Welcome)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send 1st Email (Welcome)": {
+      "main": [
+        [
+          {
+            "node": "Wait 5 Hours",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5 Hours": {
+      "main": [
+        [
+          {
+            "node": "Count Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Interview Slot (auto Meet link)": {
+      "main": [
+        [
+          {
+            "node": "Send 2nd Email (Interview Details)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config (EDIT ME per role)": {
+      "main": [
+        [
+          {
+            "node": "Extract Candidate Name & Email (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Score >= Threshold?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Candidates": {
+      "main": [
+        [
+          {
+            "node": "Pick Slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Slot": {
+      "main": [
+        [
+          {
+            "node": "Create Interview Slot (auto Meet link)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "tags": []
+}
